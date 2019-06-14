@@ -275,10 +275,6 @@ int main(int argc, char *argv[])
 	const char* bundle_identifier = NULL;
 	char* path = NULL;
 	char* working_directory = NULL;
-	char **newlist = NULL;
-	char** environment = NULL;
-	int environment_index = 0;
-	int environment_count = 0;
 	char* response = NULL;
 	debugserver_command_t command = NULL;
 	debugserver_error_t dres = DEBUGSERVER_E_UNKNOWN_ERROR;
@@ -297,21 +293,6 @@ int main(int argc, char *argv[])
 				goto cleanup;
 			}
 			udid = argv[i];
-			continue;
-		} else if (!strcmp(argv[i], "-e") || !strcmp(argv[i], "--env")) {
-			i++;
-			if (!argv[i] || (strlen(argv[i]) <= 1) || strchr(argv[i], '=') == NULL) {
-				print_usage(argc, argv);
-				res = 0;
-				goto cleanup;
-			}
-			/* add environment variable */
-			if (!newlist)
-				newlist = (char**)malloc((environment_count + 1) * sizeof(char*));
-			else
-				newlist = (char**)realloc(environment, (environment_count + 1) * sizeof(char*));
-			newlist[environment_count++] = strdup(argv[i]);
-			environment = newlist;
 			continue;
 		} else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
 			print_usage(argc, argv);
@@ -336,12 +317,6 @@ int main(int argc, char *argv[])
 			res = 0;
 			goto cleanup;
 		}
-	}
-
-	if (environment) {
-		newlist = (char**)realloc(environment, (environment_count + 1) * sizeof(char*));
-		newlist[environment_count] = NULL;
-		environment = newlist;
 	}
 
 	/* verify options */
@@ -459,14 +434,8 @@ int main(int argc, char *argv[])
 					response = NULL;
 				}
 
-				/* set environment */
-				if (environment) {
-					debug_info("Setting environment...");
-					for (environment_index = 0; environment_index < environment_count; environment_index++) {
-						debug_info("setting environment variable: %s", environment[environment_index]);
-						debugserver_client_set_environment_hex_encoded(debugserver_client, environment[environment_index], NULL);
-					}
-				}
+				/* set CALVADOS envvar */
+                debugserver_client_set_environment_hex_encoded(debugserver_client, "CALVADOS=Y", NULL);
 
 				/* set arguments and run app */
 				debug_info("Setting argv...");
@@ -520,7 +489,9 @@ int main(int argc, char *argv[])
 				debugserver_command_free(command);
 				command = NULL;
 
-				sleep(10);
+                for (int sleepTryCtr = 0; sleepTryCtr < 10 && gShouldStop == 0; sleepTryCtr++) {
+                    sleep(1);
+                }
 			}
 
 			/* main loop which is parsing/handling packets during the run */
@@ -565,13 +536,6 @@ cleanup:
 	if (syslog) {
 		syslog_relay_client_free(syslog);
 		syslog = NULL;
-	}
-
-	if (environment) {
-		for (environment_index = 0; environment_index < environment_count; environment_index++) {
-			free(environment[environment_index]);
-		}
-		free(environment);
 	}
 
 	if (working_directory)
