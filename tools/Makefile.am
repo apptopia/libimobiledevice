@@ -3,7 +3,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)
 AM_CFLAGS = $(GLOBAL_CFLAGS) $(libgnutls_CFLAGS) $(libtasn1_CFLAGS) $(libgcrypt_CFLAGS) $(openssl_CFLAGS) $(libplist_CFLAGS) $(LFS_CFLAGS)
 AM_LDFLAGS = $(libgnutls_LIBS) $(libtasn1_LIBS) $(libgcrypt_LIBS) $(openssl_LIBS) $(libplist_LIBS)
 
-bin_PROGRAMS = idevice_id ideviceinfo idevicename idevicepair idevicesyslog ideviceimagemounter idevicescreenshot ideviceenterrecovery idevicedate idevicebackup idevicebackup2 ideviceprovision idevicedebugserverproxy idevicediagnostics idevicedebug idevicenotificationproxy idevicecrashreport
+bin_PROGRAMS = idevicerejail idevice_id ideviceinfo idevicename idevicepair idevicesyslog ideviceimagemounter idevicescreenshot ideviceenterrecovery idevicedate idevicebackup idevicebackup2 ideviceprovision idevicedebugserverproxy idevicediagnostics idevicedebug idevicenotificationproxy idevicecrashreport
 
 ideviceinfo_SOURCES = ideviceinfo.c
 ideviceinfo_CFLAGS = $(AM_CFLAGS)
@@ -24,6 +24,11 @@ idevicesyslog_SOURCES = idevicesyslog.c
 idevicesyslog_CFLAGS = $(AM_CFLAGS)
 idevicesyslog_LDFLAGS = $(AM_LDFLAGS)
 idevicesyslog_LDADD = $(top_builddir)/src/libimobiledevice.la
+
+idevicerejail_SOURCES = idevicerejail.cpp
+idevicerejail_CFLAGS = $(AM_CFLAGS)
+idevicerejail_LDFLAGS = $(AM_LDFLAGS)
+idevicerejail_LDADD = $(top_builddir)/src/libimobiledevice.la
 
 idevice_id_SOURCES = idevice_id.c
 idevice_id_CFLAGS = $(AM_CFLAGS)
