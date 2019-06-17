@@ -25,7 +25,7 @@ idevicesyslog_CFLAGS = $(AM_CFLAGS)
 idevicesyslog_LDFLAGS = $(AM_LDFLAGS)
 idevicesyslog_LDADD = $(top_builddir)/src/libimobiledevice.la
 
-idevicerejail_SOURCES = idevicerejail.cpp
+idevicerejail_SOURCES = idevicerejail.c
 idevicerejail_CFLAGS = $(AM_CFLAGS)
 idevicerejail_LDFLAGS = $(AM_LDFLAGS)
 idevicerejail_LDADD = $(top_builddir)/src/libimobiledevice.la
