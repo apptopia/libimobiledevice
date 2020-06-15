@@ -1,8 +1,3 @@
-.vs/
-Win32/
-x64/
-Debug/
-*.user
 # git-ls-files --others --exclude-from=.git/info/exclude
 # Lines that start with '#' are comments.
 # For a project mostly in C, the following would be a good set of
@@ -41,25 +36,8 @@ src/.libs
 docs/html
 libimobiledevice-1.0.pc
 tools/.libs/*
-tools/idevice_id
-tools/ideviceinfo
-tools/idevicesyslog
-tools/idevicebackup
-tools/ideviceimagemounter
-tools/idevicescreenshot
-tools/idevicebackup2
-tools/idevicedate
-tools/idevicedebugserverproxy
-tools/idevicediagnostics
-tools/ideviceenterrecovery
-tools/idevicename
-tools/idevicepair
-tools/ideviceprovision
-tools/idevicecrashreport
-tools/idevicedebug
-tools/idevicenotificationproxy
-tools/idevicesetlocation
-tools/idevicerejail
+tools/idevice*
+!tools/idevice*.[ch]
 cython/.libs/*
 cython/*.c
 doxygen.cfg
