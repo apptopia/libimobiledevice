@@ -175,6 +175,7 @@ static debugserver_error_t debugserver_client_handle_response(debugserver_client
 	debugserver_command_t command = NULL;
 	char* o = NULL;
 	char* r = *response;
+	size_t response_size = 0;
 
 	if (r[0] == 'O') {
 		/* stdout/stderr */
@@ -194,7 +195,7 @@ static debugserver_error_t debugserver_client_handle_response(debugserver_client
 
 		/* send reply */
 		debugserver_command_new("OK", 0, NULL, &command);
-		dres = debugserver_client_send_command(client, command, response);
+		dres = debugserver_client_send_command(client, command, response, &response_size);
 		debug_info("result: %d", dres);
 		debugserver_command_free(command);
 		command = NULL;
@@ -220,7 +221,7 @@ static debugserver_error_t debugserver_client_handle_response(debugserver_client
 
 		/* send reply */
 		debugserver_command_new("OK", 0, NULL, &command);
-		dres = debugserver_client_send_command(client, command, response);
+		dres = debugserver_client_send_command(client, command, response, &response_size);
 		debug_info("result: %d", dres);
 		debugserver_command_free(command);
 		command = NULL;
@@ -233,7 +234,7 @@ static debugserver_error_t debugserver_client_handle_response(debugserver_client
 
 		/* no command */
 		debugserver_command_new("OK", 0, NULL, &command);
-		dres = debugserver_client_send_command(client, command, response);
+		dres = debugserver_client_send_command(client, command, response, &response_size);
 		debug_info("result: %d", dres);
 		debugserver_command_free(command);
 		command = NULL;
@@ -276,6 +277,7 @@ int main(int argc, char *argv[])
 	char* path = NULL;
 	char* working_directory = NULL;
 	char* response = NULL;
+	size_t response_size = 0;
 	debugserver_command_t command = NULL;
 	debugserver_error_t dres = DEBUGSERVER_E_UNKNOWN_ERROR;
 
@@ -389,7 +391,8 @@ int main(int argc, char *argv[])
 				if (debug_level) {
 					debug_info("Setting logging bitmask...");
 					debugserver_command_new("QSetLogging:bitmask=LOG_ALL|LOG_RNB_REMOTE|LOG_RNB_PACKETS", 0, NULL, &command);
-					dres = debugserver_client_send_command(debugserver_client, command, &response);
+					response_size = 0;
+					dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
 					debugserver_command_free(command);
 					command = NULL;
 					if (response) {
@@ -407,7 +410,8 @@ int main(int argc, char *argv[])
 				char* packet_size[2] = {strdup("512"), NULL};
 				debugserver_command_new("QSetMaxPacketSize:", 1, packet_size, &command);
 				free(packet_size[0]);
-				dres = debugserver_client_send_command(debugserver_client, command, &response);
+				response_size = 0;
+				dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
 				debugserver_command_free(command);
 				command = NULL;
 				if (response) {
@@ -423,7 +427,8 @@ int main(int argc, char *argv[])
 				debug_info("Setting working directory...");
 				char* working_dir[2] = {working_directory, NULL};
 				debugserver_command_new("QSetWorkingDir:", 1, working_dir, &command);
-				dres = debugserver_client_send_command(debugserver_client, command, &response);
+				response_size = 0;
+				dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
 				debugserver_command_free(command);
 				command = NULL;
 				if (response) {
@@ -442,7 +447,7 @@ int main(int argc, char *argv[])
 				debug_info("Setting argv...");
 				i++; /* i is the offset of the bundle identifier, thus skip it */
 				int app_argc = (argc - i + 2);
-				char **app_argv = (char**)malloc(sizeof(char*) * app_argc);
+				const char **app_argv = (const char **)malloc(sizeof(char*) * app_argc);
 				app_argv[0] = path;
 				debug_info("app_argv[%d] = %s", 0, app_argv[0]);
 				app_argc = 1;
@@ -458,7 +463,8 @@ int main(int argc, char *argv[])
 				/* check if launch succeeded */
 				debug_info("Checking if launch succeeded...");
 				debugserver_command_new("qLaunchSuccess", 0, NULL, &command);
-				dres = debugserver_client_send_command(debugserver_client, command, &response);
+				response_size = 0;
+				dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
 				debugserver_command_free(command);
 				command = NULL;
 				if (response) {
@@ -472,7 +478,8 @@ int main(int argc, char *argv[])
 				/* set thread */
 				debug_info("Setting thread...");
 				debugserver_command_new("Hc0", 0, NULL, &command);
-				dres = debugserver_client_send_command(debugserver_client, command, &response);
+				response_size = 0;
+				dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
 				debugserver_command_free(command);
 				command = NULL;
 				if (response) {
@@ -492,7 +499,9 @@ int main(int argc, char *argv[])
                     debugserver_command_new("k", 0, NULL, &command);
                     
                 }
-                dres = debugserver_client_send_command(debugserver_client, command, &response);
+
+                response_size = 0;
+                dres = debugserver_client_send_command(debugserver_client, command, &response, &response_size);
                 debugserver_command_free(command);
                 command = NULL;
 
