@@ -26,7 +26,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <unistd.h>
 #include <plist/plist.h>
 
 #include "installation_proxy.h"
@@ -261,7 +260,7 @@ LIBIMOBILEDEVICE_API instproxy_error_t instproxy_client_free(instproxy_client_t 
 	if (!client)
 		return INSTPROXY_E_INVALID_ARG;
 
-	property_list_service_client_free(client->parent);
+	property_list_service_client_t parent = client->parent;
 	client->parent = NULL;
 	if (client->receive_status_thread) {
 		debug_info("joining receive_status_thread");
@@ -269,6 +268,7 @@ LIBIMOBILEDEVICE_API instproxy_error_t instproxy_client_free(instproxy_client_t 
 		thread_free(client->receive_status_thread);
 		client->receive_status_thread = THREAD_T_NULL;
 	}
+	property_list_service_client_free(parent);
 	mutex_destroy(&client->mutex);
 	free(client);
 

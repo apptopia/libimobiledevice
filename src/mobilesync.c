@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2010 Bryan Forbes All Rights Reserved.
  * Copyright (c) 2009 Jonathan Beck All Rights Reserved.
+ * Copyright (c) 2016 Frederik Carlier All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,9 +21,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 #define _GNU_SOURCE 1
 #define __USE_GNU 1
-
 #include <plist/plist.h>
 #include <string.h>
 #include <stdlib.h>
@@ -57,6 +60,10 @@ static mobilesync_error_t mobilesync_error(device_link_service_error_t err)
 			return MOBILESYNC_E_PLIST_ERROR;
 		case DEVICE_LINK_SERVICE_E_MUX_ERROR:
 			return MOBILESYNC_E_MUX_ERROR;
+		case DEVICE_LINK_SERVICE_E_SSL_ERROR:
+			return MOBILESYNC_E_SSL_ERROR;
+		case DEVICE_LINK_SERVICE_E_RECEIVE_TIMEOUT:
+			return MOBILESYNC_E_RECEIVE_TIMEOUT;
 		case DEVICE_LINK_SERVICE_E_BAD_VERSION:
 			return MOBILESYNC_E_BAD_VERSION;
 		default:
@@ -708,9 +715,9 @@ LIBIMOBILEDEVICE_API mobilesync_error_t mobilesync_cancel(mobilesync_client_t cl
 	return err;
 }
 
-LIBIMOBILEDEVICE_API mobilesync_anchors_t mobilesync_anchors_new(const char *device_anchor, const char *computer_anchor)
+LIBIMOBILEDEVICE_API mobilesync_error_t mobilesync_anchors_new(const char *device_anchor, const char *computer_anchor, mobilesync_anchors_t *anchor)
 {
-	mobilesync_anchors_t anchors = (mobilesync_anchors_t) malloc(sizeof(mobilesync_anchors));
+    mobilesync_anchors_t anchors = (mobilesync_anchors_t) malloc(sizeof(mobilesync_anchors));
 	if (device_anchor != NULL) {
 		anchors->device_anchor = strdup(device_anchor);
 	} else {
@@ -722,10 +729,11 @@ LIBIMOBILEDEVICE_API mobilesync_anchors_t mobilesync_anchors_new(const char *dev
 		anchors->computer_anchor = NULL;
 	}
 
-	return anchors;
+    *anchor = anchors;
+	return MOBILESYNC_E_SUCCESS;
 }
 
-LIBIMOBILEDEVICE_API void mobilesync_anchors_free(mobilesync_anchors_t anchors)
+LIBIMOBILEDEVICE_API mobilesync_error_t mobilesync_anchors_free(mobilesync_anchors_t anchors)
 {
 	if (anchors->device_anchor != NULL) {
 		free(anchors->device_anchor);
@@ -737,6 +745,8 @@ LIBIMOBILEDEVICE_API void mobilesync_anchors_free(mobilesync_anchors_t anchors)
 	}
 	free(anchors);
 	anchors = NULL;
+
+	return MOBILESYNC_E_SUCCESS;
 }
 
 LIBIMOBILEDEVICE_API plist_t mobilesync_actions_new(void)

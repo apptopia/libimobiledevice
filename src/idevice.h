@@ -33,6 +33,14 @@
 #include <gnutls/x509.h>
 #endif
 
+#ifdef _MSC_VER
+// Visual C++ requires the declaration of methods to be exactly the same
+// in the .h and .c files; otherwise it throws C2375. 
+// In libimobiledevice.h, we always prefix the methods with __declspec( dllexport ) 
+// through the LIBIMOBILEDEVICE_API_MSC definition.
+// We mimic that behavior here.
+#define LIBIMOBILEDEVICE_API __declspec( dllexport )
+#else
 #ifdef WIN32
 #define LIBIMOBILEDEVICE_API __declspec( dllexport )
 #else
@@ -42,13 +50,12 @@
 #define LIBIMOBILEDEVICE_API
 #endif
 #endif
+#endif
 
 #include "common/userpref.h"
 #include "libimobiledevice/libimobiledevice.h"
 
-enum connection_type {
-	CONNECTION_USBMUXD = 1
-};
+#define DEVICE_VERSION(maj, min, patch) (((maj & 0xFF) << 16) | ((min & 0xFF) << 8) | (patch & 0xFF))
 
 struct ssl_data_private {
 #ifdef HAVE_OPENSSL
@@ -66,8 +73,8 @@ struct ssl_data_private {
 typedef struct ssl_data_private *ssl_data_t;
 
 struct idevice_connection_private {
-	char *udid;
-	enum connection_type type;
+	idevice_t device;
+	enum idevice_connection_type type;
 	void *data;
 	ssl_data_t ssl_data;
 };
@@ -75,7 +82,7 @@ struct idevice_connection_private {
 struct idevice_private {
 	char *udid;
 	uint32_t mux_id;
-	enum connection_type conn_type;
+	enum idevice_connection_type conn_type;
 	void *conn_data;
 	int version;
 };

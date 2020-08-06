@@ -2,8 +2,8 @@
  * idevicebackup2.c
  * Command line interface to use the device's backup and restore service
  *
- * Copyright (c) 2010-2018 Nikias Bassen All Rights Reserved.
- * Copyright (c) 2009-2010 Martin Szulecki All Rights Reserved.
+ * Copyright (c) 2010-2019 Nikias Bassen, All Rights Reserved.
+ * Copyright (c) 2009-2010 Martin Szulecki, All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,12 +24,20 @@
 #include <config.h>
 #endif
 
+#define TOOL_NAME "idevicebackup2"
+
+#ifdef WIN32
+#include <windows.h>
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
+#ifndef _MSC_VER	
+#include <unistd.h>	
+#endif
 #include <dirent.h>
 #include <libgen.h>
 #include <ctype.h>
@@ -42,6 +50,7 @@
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/installation_proxy.h>
 #include <libimobiledevice/sbservices.h>
+#include <libimobiledevice/diagnostics_relay.h>
 #include "common/utils.h"
 
 #include <endianness.h>
@@ -50,7 +59,6 @@
 #define LOCK_WAIT 200000
 
 #ifdef WIN32
-#include <windows.h>
 #include <conio.h>
 #define sleep(x) Sleep(x*1000)
 #else
@@ -58,6 +66,19 @@
 #include <sys/statvfs.h>
 #endif
 #include <sys/stat.h>
+
+#ifdef _MSC_VER
+void usleep(DWORD waitTime) {
+    LARGE_INTEGER perfCnt, start, now;
+
+    QueryPerformanceFrequency(&perfCnt);
+    QueryPerformanceCounter(&start);
+
+    do {
+        QueryPerformanceCounter((LARGE_INTEGER*)&now);
+    } while ((now.QuadPart - start.QuadPart) / (float)(perfCnt.QuadPart) * 1000 * 1000 < waitTime);
+}
+#endif
 
 #define CODE_SUCCESS 0x00
 #define CODE_ERROR_LOCAL 0x06
@@ -166,8 +187,13 @@ static void mobilebackup_afc_get_file_contents(afc_client_t afc, const char *fil
 static int __mkdir(const char* path, int mode)
 {
 #ifdef WIN32
-	return mkdir(path);
+	// CreateDirectory returns a non-zero value on success,
+	// and zero on failure
+	// https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createdirectorya
+	return CreateDirectory(path, NULL) == 0;
 #else
+	// mkdir returns zero on success, and an error code on failure
+	// https://linux.die.net/man/2/mkdir
 	return mkdir(path, mode);
 #endif
 }
@@ -178,7 +204,13 @@ static int mkdir_with_parents(const char *dir, int mode)
 	if (__mkdir(dir, mode) == 0) {
 		return 0;
 	} else {
+#if WIN32
+		int lastError = GetLastError();
+		
+		if (lastError == ERROR_ALREADY_EXISTS || lastError == ERROR_SUCCESS) return 0;
+#else
 		if (errno == EEXIST) return 0;
+#endif
 	}
 	int res;
 	char *parent = strdup(dir);
@@ -345,7 +377,7 @@ static plist_t mobilebackup_factory_info_plist_new(const char* udid, idevice_t d
 	char *udid_uppercase = NULL;
 
 	lockdownd_client_t lockdown = NULL;
-	if (lockdownd_client_new_with_handshake(device, &lockdown, "idevicebackup2") != LOCKDOWN_E_SUCCESS) {
+	if (lockdownd_client_new_with_handshake(device, &lockdown, TOOL_NAME) != LOCKDOWN_E_SUCCESS) {
 		return NULL;
 	}
 
@@ -366,7 +398,7 @@ static plist_t mobilebackup_factory_info_plist_new(const char* udid, idevice_t d
 	plist_t app_dict = plist_new_dict();
 	plist_t installed_apps = plist_new_array();
 	instproxy_client_t ip = NULL;
-	if (instproxy_client_start_service(device, &ip, "idevicebackup2") == INSTPROXY_E_SUCCESS) {
+	if (instproxy_client_start_service(device, &ip, TOOL_NAME) == INSTPROXY_E_SUCCESS) {
 		plist_t client_opts = instproxy_client_options_new();
 		instproxy_client_options_add(client_opts, "ApplicationType", "User", NULL);
 		instproxy_client_options_set_return_attributes(client_opts, "CFBundleIdentifier", "ApplicationSINF", "iTunesMetadata", NULL);
@@ -375,7 +407,7 @@ static plist_t mobilebackup_factory_info_plist_new(const char* udid, idevice_t d
 		instproxy_browse(ip, client_opts, &apps);
 
 		sbservices_client_t sbs = NULL;
-		if (sbservices_client_start_service(device, &sbs, "idevicebackup2") != SBSERVICES_E_SUCCESS) {
+		if (sbservices_client_start_service(device, &sbs, TOOL_NAME) != SBSERVICES_E_SUCCESS) {
 			printf("Couldn't establish sbservices connection. Continuing anyway.\n");
 		}
 
@@ -626,7 +658,7 @@ static void do_post_notification(idevice_t device, const char *notification)
 
 	lockdownd_client_t lockdown = NULL;
 
-	if (lockdownd_client_new_with_handshake(device, &lockdown, "idevicebackup2") != LOCKDOWN_E_SUCCESS) {
+	if (lockdownd_client_new_with_handshake(device, &lockdown, TOOL_NAME) != LOCKDOWN_E_SUCCESS) {
 		return;
 	}
 
@@ -1402,13 +1434,15 @@ static void print_usage(int argc, char **argv)
 	char *name = NULL;
 	name = strrchr(argv[0], '/');
 	printf("Usage: %s [OPTIONS] CMD [CMDOPTIONS] DIRECTORY\n", (name ? name + 1: argv[0]));
-	printf("Create or restore backup from the current or specified directory.\n\n");
-	printf("commands:\n");
+	printf("\n");
+	printf("Create or restore backup from the current or specified directory.\n");
+	printf("\n");
+	printf("CMD:\n");
 	printf("  backup\tcreate backup for the device\n");
 	printf("    --full\t\tforce full backup from device.\n");
 	printf("  restore\trestore last backup to the device\n");
 	printf("    --system\t\trestore system files, too.\n");
-	printf("    --no-reboot\t\tdo NOT reboot the system when done (default: yes).\n");
+	printf("    --no-reboot\t\tdo NOT reboot the device when done (default: yes).\n");
 	printf("    --copy\t\tcreate a copy of backup folder before restoring.\n");
 	printf("    --settings\t\trestore device settings from the backup.\n");
 	printf("    --remove\t\tremove items which are not being restored\n");
@@ -1423,15 +1457,20 @@ static void print_usage(int argc, char **argv)
 	printf("    NOTE: passwords will be requested in interactive mode if omitted\n");
 	printf("  cloud on|off\tenable or disable cloud use (requires iCloud account)\n");
 	printf("\n");
-	printf("options:\n");
-	printf("  -d, --debug\t\tenable communication debugging\n");
+	printf("OPTIONS:\n");
 	printf("  -u, --udid UDID\ttarget specific device by UDID\n");
 	printf("  -s, --source UDID\tuse backup data from device specified by UDID\n");
+	printf("  -n, --network\t\tconnect to network device\n");
 	printf("  -i, --interactive\trequest passwords interactively\n");
+	printf("  -d, --debug\t\tenable communication debugging\n");
 	printf("  -h, --help\t\tprints usage information\n");
+	printf("  -v, --version\t\tprints version information\n");
 	printf("\n");
-	printf("Homepage: <" PACKAGE_URL ">\n");
+	printf("Homepage:    <" PACKAGE_URL ">\n");
+	printf("Bug Reports: <" PACKAGE_BUGREPORT ">\n");
 }
+
+#define DEVICE_VERSION(maj, min, patch) (((maj & 0xFF) << 16) | ((min & 0xFF) << 8) | (patch & 0xFF))
 
 int main(int argc, char *argv[])
 {
@@ -1440,6 +1479,7 @@ int main(int argc, char *argv[])
 	int i;
 	char* udid = NULL;
 	char* source_udid = NULL;
+	int use_network = 0;
 	lockdownd_service_descriptor_t service = NULL;
 	int cmd = -1;
 	int cmd_flags = 0;
@@ -1487,12 +1527,20 @@ int main(int argc, char *argv[])
 			source_udid = strdup(argv[i]);
 			continue;
 		}
+		else if (!strcmp(argv[i], "-n") || !strcmp(argv[i], "--network")) {
+			use_network = 1;
+			continue;
+		}
 		else if (!strcmp(argv[i], "-i") || !strcmp(argv[i], "--interactive")) {
 			interactive_mode = 1;
 			continue;
 		}
 		else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
 			print_usage(argc, argv);
+			return 0;
+		}
+		else if (!strcmp(argv[i], "-v") || !strcmp(argv[i], "--version")) {
+			printf("%s %s\n", TOOL_NAME, PACKAGE_VERSION);
 			return 0;
 		}
 		else if (!strcmp(argv[i], "backup")) {
@@ -1656,20 +1704,17 @@ int main(int argc, char *argv[])
 	}
 
 	idevice_t device = NULL;
-	if (udid) {
-		ret = idevice_new(&device, udid);
-		if (ret != IDEVICE_E_SUCCESS) {
-			printf("No device found with udid %s, is it plugged in?\n", udid);
-			return -1;
+	ret = idevice_new_with_options(&device, udid, (use_network) ? IDEVICE_LOOKUP_NETWORK : IDEVICE_LOOKUP_USBMUX);
+	if (ret != IDEVICE_E_SUCCESS) {
+		if (udid) {
+			printf("No device found with udid %s.\n", udid);
+		} else {
+			printf("No device found.\n");
 		}
+		return -1;
 	}
-	else
-	{
-		ret = idevice_new(&device, NULL);
-		if (ret != IDEVICE_E_SUCCESS) {
-			printf("No device found, is it plugged in?\n");
-			return -1;
-		}
+
+	if (!udid) {
 		idevice_get_udid(device, &udid);
 	}
 
@@ -1740,7 +1785,7 @@ int main(int argc, char *argv[])
 	}
 
 	lockdownd_client_t lockdown = NULL;
-	if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(device, &lockdown, "idevicebackup2"))) {
+	if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(device, &lockdown, TOOL_NAME))) {
 		printf("ERROR: Could not connect to lockdownd, error code %d\n", ldret);
 		idevice_free(device);
 		return -1;
@@ -1755,6 +1800,25 @@ int main(int argc, char *argv[])
 		}
 		plist_free(node_tmp);
 		node_tmp = NULL;
+	}
+
+	/* get ProductVersion */
+	char *product_version = NULL;
+	int device_version = 0;
+	node_tmp = NULL;
+	lockdownd_get_value(lockdown, NULL, "ProductVersion", &node_tmp);
+	if (node_tmp) {
+		if (plist_get_node_type(node_tmp) == PLIST_STRING) {
+			plist_get_string_val(node_tmp, &product_version);
+		}
+		plist_free(node_tmp);
+		node_tmp = NULL;
+	}
+	if (product_version) {
+		int vers[3] = { 0, 0, 0 };
+		if (sscanf(product_version, "%d.%d.%d", &vers[0], &vers[1], &vers[2]) >= 2) {
+			device_version = DEVICE_VERSION(vers[0], vers[1], vers[2]);
+		}
 	}
 
 	/* start notification_proxy */
@@ -1892,8 +1956,20 @@ checkpoint:
 
 			/* make sure backup device sub-directory exists */
 			char* devbackupdir = string_build_path(backup_directory, source_udid, NULL);
-			__mkdir(devbackupdir, 0755);
+			result_code = __mkdir(devbackupdir, 0755);
 			free(devbackupdir);
+
+			if (result_code != 0) {
+#ifdef WIN32
+				if (GetLastError() != ERROR_ALREADY_EXISTS) {
+#else
+				if (errno != EEXIST) {
+#endif
+					printf("Error creating the backup directory, error code\n");
+					cmd = CMD_LEAVE;
+					break;
+				}
+			}
 
 			if (strcmp(source_udid, udid) != 0) {
 				/* handle different source backup directory */
@@ -2108,6 +2184,32 @@ checkpoint:
 			}
 			if (newpw || backup_password) {
 				mobilebackup2_send_message(mobilebackup2, "ChangePassword", opts);
+				uint8_t passcode_hint = 0;
+				if (device_version >= DEVICE_VERSION(13,0,0)) {
+					diagnostics_relay_client_t diag = NULL;
+					if (diagnostics_relay_client_start_service(device, &diag, TOOL_NAME) == DIAGNOSTICS_RELAY_E_SUCCESS) {
+						plist_t dict = NULL;
+						plist_t keys = plist_new_array();
+						plist_array_append_item(keys, plist_new_string("PasswordConfigured"));
+						if (diagnostics_relay_query_mobilegestalt(diag, keys, &dict) == DIAGNOSTICS_RELAY_E_SUCCESS) {
+							plist_t node = plist_access_path(dict, 2, "MobileGestalt", "PasswordConfigured");
+							plist_get_bool_val(node, &passcode_hint);
+						}
+						plist_free(keys);
+						plist_free(dict);
+						diagnostics_relay_goodbye(diag);
+						diagnostics_relay_client_free(diag);
+					}
+				}
+				if (passcode_hint) {
+					if (cmd_flags & CMD_FLAG_ENCRYPTION_CHANGEPW) {
+						PRINT_VERBOSE(1, "Please confirm changing the backup password by entering the passcode on the device.\n");
+					} else if (cmd_flags & CMD_FLAG_ENCRYPTION_ENABLE) {
+						PRINT_VERBOSE(1, "Please confirm enabling the backup encryption by entering the passcode on the device.\n");
+					} else if (cmd_flags & CMD_FLAG_ENCRYPTION_DISABLE) {
+						PRINT_VERBOSE(1, "Please confirm disabling the backup encryption by entering the passcode on the device.\n");
+					}
+				}
 				/*if (cmd_flags & CMD_FLAG_ENCRYPTION_ENABLE) {
 					int retr = 10;
 					while ((retr-- >= 0) && !backup_domain_changed) {
@@ -2128,6 +2230,7 @@ checkpoint:
 			int operation_ok = 0;
 			plist_t message = NULL;
 
+			mobilebackup2_error_t mberr;
 			char *dlmsg = NULL;
 			int file_count = 0;
 			int errcode = 0;
@@ -2138,10 +2241,13 @@ checkpoint:
 			do {
 				free(dlmsg);
 				dlmsg = NULL;
-				mobilebackup2_receive_message(mobilebackup2, &message, &dlmsg);
-				if (!message || !dlmsg) {
-					PRINT_VERBOSE(1, "Device is not ready yet. Going to try again in 2 seconds...\n");
-					sleep(2);
+				mberr = mobilebackup2_receive_message(mobilebackup2, &message, &dlmsg);
+				if (mberr == MOBILEBACKUP2_E_RECEIVE_TIMEOUT) {
+					PRINT_VERBOSE(2, "Device is not ready yet, retrying...\n");
+					goto files_out;
+				} else if (mberr != MOBILEBACKUP2_E_SUCCESS) {
+					PRINT_VERBOSE(0, "ERROR: Could not receive from mobilebackup2 (%d)\n", mberr);
+					quit_flag++;
 					goto files_out;
 				}
 
@@ -2447,12 +2553,18 @@ files_out:
 				}
 				break;
 				case CMD_RESTORE:
-				if ((cmd_flags & CMD_FLAG_RESTORE_NO_REBOOT) == 0)
-					PRINT_VERBOSE(1, "The device should reboot now.\n");
 				if (operation_ok) {
+					if ((cmd_flags & CMD_FLAG_RESTORE_NO_REBOOT) == 0)
+						PRINT_VERBOSE(1, "The device should reboot now.\n");
 					PRINT_VERBOSE(1, "Restore Successful.\n");
 				} else {
-					PRINT_VERBOSE(1, "Restore Failed (Error Code %d).\n", -result_code);
+					afc_remove_path(afc, "/iTunesRestore/RestoreApplications.plist");
+					afc_remove_path(afc, "/iTunesRestore");
+					if (quit_flag) {
+						PRINT_VERBOSE(1, "Restore Aborted.\n");
+					} else {
+						PRINT_VERBOSE(1, "Restore Failed (Error Code %d).\n", -result_code);
+					}
 				}
 				break;
 				case CMD_INFO:
