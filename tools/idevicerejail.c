@@ -61,8 +61,8 @@ static void syslog_callback(char c, void *user_data) {
 
 	if (c == '\n') {
 		fflush(stdout);
-		if (strstr(loggingBuf, "autoh3lix") || strstr(loggingBuf, "Calvados")) {
-			fprintf(stderr, "h3lix or unc0ver started, exiting\n");
+		if (strstr(loggingBuf, "Rejail")) {
+			fprintf(stderr, "Rejail started, exiting\n");
 			gShouldStop = 1;
 		}
 
@@ -375,6 +375,7 @@ int main(int argc, char *argv[])
 				goto cleanup;
 			}
 
+            int phase = 0;
 			int original_i = i;
 			while (!gShouldStop) {
 				i = original_i;
@@ -482,16 +483,24 @@ int main(int argc, char *argv[])
 					response = NULL;
 				}
 
-				/* detaching running process */
-				debug_info("Detaching running process...");
-				debugserver_command_new("c", 0, NULL, &command);
-				dres = debugserver_client_send_command(debugserver_client, command, &response);
-				debugserver_command_free(command);
-				command = NULL;
+                if (phase) {
+                    debug_info("Detaching running process...");
+                    debugserver_command_new("c", 0, NULL, &command);
+                }
+                else {
+                    debug_info("Killing running process...");
+                    debugserver_command_new("k", 0, NULL, &command);
+                    
+                }
+                dres = debugserver_client_send_command(debugserver_client, command, &response);
+                debugserver_command_free(command);
+                command = NULL;
 
                 for (int sleepTryCtr = 0; sleepTryCtr < 10 && gShouldStop == 0; sleepTryCtr++) {
                     sleep(1);
                 }
+                
+                phase = !phase;
 			}
 
 			/* main loop which is parsing/handling packets during the run */
